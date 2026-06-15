@@ -424,9 +424,9 @@ with st.container(border=True):
     with c1:
         bill_date = st.date_input("Date", value=date.today())
     with c2:
-        customer_name = st.text_input("Customer Name", placeholder="e.g. Nimal Perera")
+        customer_name = st.text_input("Customer Name", placeholder="e.g. John Perera")
     with c3:
-        customer_email = st.text_input("Customer Email", placeholder="e.g. nimal@example.com")
+        customer_email = st.text_input("Customer Email", placeholder="e.g. John@example.com")
         if customer_email and not validate_email(customer_email):
             st.error("Invalid Email Address! Please enter a valid email.")
             is_valid = False
