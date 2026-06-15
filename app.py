@@ -28,8 +28,8 @@ BUSINESS_TAGLINE = "Your Trusted Mobile Partner"
 st.set_page_config(page_title=f"{BUSINESS_NAME} Billing", page_icon="📱", layout="wide")
 
 # Establish Supabase connection
-SUPABASE_URL = st.secrets["https://tbrvjkosxqultiygdfmy.supabase.co"]
-SUPABASE_KEY = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRicnZqa29zeHF1bHRpeWdkZm15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1MzQ3NTUsImV4cCI6MjA5NzExMDc1NX0.UHhxL_8hDHei2gsuecFrvKjSdsU_zXoCBLYLcbqkzpo"]
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
 @st.cache_resource
 def get_supabase_client() -> Client:
