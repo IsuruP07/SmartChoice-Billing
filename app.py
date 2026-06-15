@@ -422,7 +422,7 @@ with st.container(border=True):
     st.markdown('<p class="section-label">📋 Customer & Date</p>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1.5, 1.5])
     with c1:
-        bill_date = st.text_input("Date", value=str(date.today()), placeholder="e.g. 2026/06/15")
+        bill_date = st.date_input("Date", value=date.today())
     with c2:
         customer_name = st.text_input("Customer Name", placeholder="e.g. Nimal Perera")
     with c3:
