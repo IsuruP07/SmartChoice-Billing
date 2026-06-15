@@ -474,7 +474,7 @@ with st.container(border=True):
 
     # ── Row 4: Pricing ──
     st.markdown('<p class="section-label">💰 Pricing</p>', unsafe_allow_html=True)
-    p1, p2, p3 = st.columns(3)
+    p1, p2 = st.columns(2)
     with p1:
         total_price = st.text_input("Total Agreed Price (Rs.)", placeholder="e.g. 150000")
         if total_price:
@@ -488,13 +488,6 @@ with st.container(border=True):
             clean_balance = balance.replace(",", "").replace(" ", "").strip()
             if not clean_balance.isdigit():
                 st.error("Enter a valid Balance Amount (numbers only).")
-                is_valid = False
-    with p3:
-        estimated_profit = st.text_input("Estimated Profit (Rs.)", placeholder="e.g. 5000")
-        if estimated_profit:
-            clean_profit = estimated_profit.replace(",", "").replace(" ", "").strip()
-            if not clean_profit.isdigit():
-                st.error("Enter a valid Profit Value (numbers only).")
                 is_valid = False
 
     st.divider()
@@ -527,13 +520,10 @@ if submitted:
     
     clean_total = total_price.replace(",", "").replace(" ", "").strip()
     clean_balance = balance.replace(",", "").replace(" ", "").strip()
-    clean_profit = estimated_profit.replace(",", "").replace(" ", "").strip()
     if not clean_total.isdigit():
         errors.append("Enter a valid Total Value (numbers only).")
     if not clean_balance.isdigit():
         errors.append("Enter a valid Balance Amount (numbers only).")
-    if clean_profit and not clean_profit.isdigit():
-        errors.append("Enter a valid Profit Value (numbers only).")
 
     if errors:
         for e in errors:
@@ -559,7 +549,6 @@ if submitted:
             "total_price": formatted_total,
             "balance": formatted_balance,
             "other_notes": other_notes.strip(),
-            "profit": int(clean_profit) if clean_profit.isdigit() else 0,
         }
 
         # Save to Supabase
