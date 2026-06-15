@@ -50,11 +50,11 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .main-header p { color: #8892b0; font-size: 0.85rem; letter-spacing: 2px; margin: 4px 0 0 0; }
 .section-label {
     font-size: 0.75rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
-    color: #888; margin-bottom: 0.5rem; padding-bottom: 0.4rem; border-bottom: 2px solid #eee;
+    margin-bottom: 0.5rem; padding-bottom: 0.4rem; border-bottom: 1px solid rgba(128, 128, 128, 0.2);
 }
 div[data-testid="stForm"] {
-    border: 1px solid #e0e0e0; border-radius: 12px; padding: 1.5rem;
-    background: #fafbfc; box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+    border-radius: 12px; padding: 1.5rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
 }
 .stButton > button[kind="formSubmit"],
 div[data-testid="stForm"] button[kind="formSubmit"] {
@@ -65,6 +65,15 @@ div[data-testid="stForm"] button[kind="formSubmit"] {
 }
 div[data-testid="stForm"] button[kind="formSubmit"]:hover {
     background: linear-gradient(135deg, #388e3c, #1b5e20) !important;
+}
+
+/* Ensure labels and text are visible based on theme */
+div[data-testid="stMarkdownContainer"] p {
+    color: inherit;
+}
+/* Ensure input field text is visible */
+input {
+    color: inherit !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -83,10 +92,23 @@ st.markdown(f"""
 # ══════════════════════════════════════
 
 def validate_email(email: str) -> bool:
-    return bool(re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", email))
+    return bool(re.match(r"[^@]+@[^@]+\.[^@]+", email))
 
 def validate_imei(imei: str) -> bool:
     return bool(re.match(r"^\d{15}$", imei))
+
+def validate_contact(contact: str) -> bool:
+    return len(contact) == 10 and contact.isdigit() and contact.startswith('0')
+
+def format_currency_field(val: str) -> str:
+    val_str = str(val).strip()
+    if val_str.startswith("LKR Rs."):
+        return val_str
+    # Remove any existing prefix/commas
+    clean = val_str.replace("LKR Rs.", "").replace("Rs.", "").replace(",", "").replace(" ", "").strip()
+    if clean.isdigit():
+        return f"LKR Rs. {int(clean):,}"
+    return val_str
 
 
 def fetch_invoices() -> pd.DataFrame:
@@ -253,9 +275,9 @@ def generate_pdf(d: dict) -> bytes:
     # 4. Totals Section
     totals_data = [
         [make_paragraph("Total Amount", size=9, bold=True, color=colors.HexColor('#666666')),
-         make_paragraph(f"Rs. {d['total_price']}", size=11, bold=True, align=TA_RIGHT)],
+         make_paragraph(format_currency_field(d['total_price']), size=11, bold=True, align=TA_RIGHT)],
         [make_paragraph("Balance Due", size=9, bold=True, color=colors.HexColor('#222222')),
-         make_paragraph(f"Rs. {d['balance']}", size=13, bold=True, color=colors.HexColor('#990000'), align=TA_RIGHT)],
+         make_paragraph(format_currency_field(d['balance']), size=13, bold=True, color=colors.HexColor('#990000'), align=TA_RIGHT)],
     ]
     totals_table = Table(totals_data, colWidths=[120, 127])
     totals_table.setStyle(TableStyle([
@@ -391,25 +413,32 @@ st.markdown('<p class="section-label">💳 Payment Type</p>', unsafe_allow_html=
 payment_type = st.radio("Payment Type", ["Full Cash", "Exchange"], horizontal=True, label_visibility="collapsed")
 
 # ══════════════════════════════════════
-#  STREAMLIT FORM
+#  BILLING CONTAINER & INTERACTIVE INPUTS
 # ══════════════════════════════════════
-with st.form("billing_form", clear_on_submit=False):
+is_valid = True
 
+with st.container(border=True):
     # ── Row 1: Date & Customer ──
     st.markdown('<p class="section-label">📋 Customer & Date</p>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1.5, 1.5])
     with c1:
-        bill_date = st.date_input("Date", value=date.today())
+        bill_date = st.text_input("Date", value=str(date.today()), placeholder="e.g. 2026/06/15")
     with c2:
-        customer_name = st.text_input("Customer Name")
+        customer_name = st.text_input("Customer Name", placeholder="e.g. Nimal Perera")
     with c3:
-        customer_email = st.text_input("Customer Email")
+        customer_email = st.text_input("Customer Email", placeholder="e.g. nimal@example.com")
+        if customer_email and not validate_email(customer_email):
+            st.error("Invalid Email Address! Please enter a valid email.")
+            is_valid = False
 
     ca1, ca2 = st.columns(2)
     with ca1:
-        customer_address = st.text_input("Customer Address")
+        customer_address = st.text_input("Customer Address", placeholder="e.g. 123, Main Street, Kandy")
     with ca2:
-        customer_contact = st.text_input("Customer Contact No")
+        customer_contact = st.text_input("Customer Contact No", placeholder="e.g. 0771234567")
+        if customer_contact and not validate_contact(customer_contact):
+            st.error("Invalid Contact Number! Must be 10 digits starting with 0.")
+            is_valid = False
 
     st.divider()
 
@@ -417,11 +446,14 @@ with st.form("billing_form", clear_on_submit=False):
     st.markdown('<p class="section-label">📦 New Phone Details</p>', unsafe_allow_html=True)
     c4, c5, c6 = st.columns(3)
     with c4:
-        new_model = st.text_input("New Phone Model")
+        new_model = st.text_input("New Phone Model", placeholder="e.g. Samsung Galaxy S24 Ultra")
     with c5:
-        new_imei = st.text_input("New Phone IMEI", max_chars=15, help="Must be exactly 15 digits")
+        new_imei = st.text_input("New Phone IMEI", max_chars=15, placeholder="e.g. 351234567890123", help="Must be exactly 15 digits")
+        if new_imei and not validate_imei(new_imei):
+            st.error("New Phone IMEI must be exactly 15 digits.")
+            is_valid = False
     with c6:
-        warranty = st.selectbox("Warranty Period", ["1 Month", "3 Months", "6 Months", "1 Year", "2 Years"])
+        warranty = st.selectbox("Warranty Period", ["7 Days", "14 Days", "21 Days", "1 Month", "3 Months", "6 Months", "1 Year", "2 Years"])
 
     # ── Row 3: Old Phone (conditional — reactive via outside radio) ──
     old_model, old_imei = "", ""
@@ -430,9 +462,12 @@ with st.form("billing_form", clear_on_submit=False):
         st.markdown('<p class="section-label">🔄 Exchange — Old Phone</p>', unsafe_allow_html=True)
         cx, cy = st.columns(2)
         with cx:
-            old_model = st.text_input("Old Phone Model")
+            old_model = st.text_input("Old Phone Model", placeholder="e.g. Samsung Galaxy S24 Ultra")
         with cy:
-            old_imei = st.text_input("Old Phone IMEI", max_chars=15, key="old_imei")
+            old_imei = st.text_input("Old Phone IMEI", max_chars=15, placeholder="e.g. 351234567890123", key="old_imei")
+            if old_imei and not validate_imei(old_imei):
+                st.error("Old Phone IMEI must be exactly 15 digits.")
+                is_valid = False
 
     st.divider()
 
@@ -440,18 +475,28 @@ with st.form("billing_form", clear_on_submit=False):
     st.markdown('<p class="section-label">💰 Pricing</p>', unsafe_allow_html=True)
     p1, p2 = st.columns(2)
     with p1:
-        total_price = st.text_input("Total Agreed Price (Rs.)", placeholder="e.g. 125000")
+        total_price = st.text_input("Total Agreed Price (Rs.)", placeholder="e.g. 150000")
+        if total_price:
+            clean_total = total_price.replace(",", "").replace(" ", "").strip()
+            if not clean_total.isdigit():
+                st.error("Enter a valid Total Value (numbers only).")
+                is_valid = False
     with p2:
-        balance = st.text_input("Balance Amount (Rs.)", placeholder="e.g. 50000")
+        balance = st.text_input("Balance Amount (Rs.)", placeholder="e.g. 150000")
+        if balance:
+            clean_balance = balance.replace(",", "").replace(" ", "").strip()
+            if not clean_balance.isdigit():
+                st.error("Enter a valid Balance Amount (numbers only).")
+                is_valid = False
 
     st.divider()
 
     # ── Other Notes ──
     st.markdown('<p class="section-label">📝 Additional Notes</p>', unsafe_allow_html=True)
-    other_notes = st.text_area("Other Notes (Optional)", height=80, placeholder="Any additional remarks for the invoice…")
+    other_notes = st.text_area("Other Notes (Optional)", height=80, placeholder="e.g. With original charger and box")
 
     st.markdown("")
-    submitted = st.form_submit_button("⚡  Generate & Send Invoice")
+    submitted = st.button("⚡  Generate & Send Invoice", disabled=not is_valid)
 
 # ── PROCESS SUBMISSION ──
 if submitted:
@@ -459,7 +504,9 @@ if submitted:
     if not customer_name.strip():
         errors.append("Customer Name is required.")
     if not customer_email.strip() or not validate_email(customer_email):
-        errors.append("A valid Customer Email is required.")
+        errors.append("Invalid Email Address! Please enter a valid email.")
+    if not validate_contact(customer_contact):
+        errors.append("Invalid Contact Number! Must be 10 digits starting with 0.")
     if not new_model.strip():
         errors.append("New Phone Model is required.")
     if not validate_imei(new_imei):
@@ -469,9 +516,12 @@ if submitted:
             errors.append("Old Phone Model is required for Exchange.")
         if not validate_imei(old_imei):
             errors.append("Old Phone IMEI must be exactly 15 digits.")
-    if not total_price.strip() or not total_price.replace(",", "").replace(" ", "").isdigit():
+    
+    clean_total = total_price.replace(",", "").replace(" ", "").strip()
+    clean_balance = balance.replace(",", "").replace(" ", "").strip()
+    if not clean_total.isdigit():
         errors.append("Enter a valid Total Value (numbers only).")
-    if not balance.strip() or not balance.replace(",", "").replace(" ", "").isdigit():
+    if not clean_balance.isdigit():
         errors.append("Enter a valid Balance Amount (numbers only).")
 
     if errors:
@@ -479,6 +529,9 @@ if submitted:
             st.error(e)
     else:
         inv_num = f"INV-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        formatted_total = format_currency_field(total_price)
+        formatted_balance = format_currency_field(balance)
+        
         data = {
             "invoice_number": inv_num,
             "date": str(bill_date),
@@ -492,8 +545,8 @@ if submitted:
             "payment_type": payment_type,
             "old_phone_model": old_model.strip() if payment_type == "Exchange" else "",
             "old_phone_imei": old_imei.strip() if payment_type == "Exchange" else "",
-            "total_price": total_price.strip(),
-            "balance": balance.strip(),
+            "total_price": formatted_total,
+            "balance": formatted_balance,
             "other_notes": other_notes.strip(),
         }
 
@@ -534,6 +587,7 @@ if submitted:
 # ── SIDEBAR: Sales History ──
 with st.sidebar:
     st.markdown("### 📊 Sales Database")
+    df = None
     try:
         df = fetch_invoices()
         if df is not None and not df.empty:
@@ -553,3 +607,18 @@ with st.sidebar:
     except Exception as e:
         st.error(f"Error loading sales database: {e}")
         st.info("Please make sure your Supabase connection is properly configured.")
+
+    if df is not None and not df.empty:
+        st.markdown("---")
+        st.markdown("### 🛠️ Manage Invoices")
+        # Sort invoice numbers descending (latest first) to make it easier to delete recent ones
+        invoice_list = sorted(df["invoice_number"].unique().tolist(), reverse=True)
+        selected_invoice = st.selectbox("Select Invoice to Delete", invoice_list)
+        
+        if st.button("🗑️ Delete Invoice", type="primary"):
+            try:
+                supabase.table("billing_details").delete().eq("invoice_number", selected_invoice).execute()
+                st.success(f"Invoice {selected_invoice} deleted!")
+                st.rerun()
+            except Exception as ex:
+                st.error(f"Failed to delete invoice: {ex}")
