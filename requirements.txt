@@ -1,4 +1,4 @@
 streamlit
 pandas
-xhtml2pdf
+reportlab
 st-gsheets-connection
