@@ -13,7 +13,11 @@ from datetime import datetime, date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
-from xhtml2pdf import pisa
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 
 # ── CONFIG ──
 SENDER_EMAIL = "smartchoicemobileskandy@gmail.com"
@@ -80,169 +84,232 @@ def validate_imei(imei: str) -> bool:
 
 
 
-def build_pdf_html(d: dict) -> str:
-    """Build a Deep Red/Charcoal/White corporate PDF invoice (xhtml2pdf-compatible)."""
-    # Conditional Notes / Remarks section
-    notes_section = ""
-    if d.get("other_notes", "").strip():
-        notes_section = f"""<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:3px;">
-    <tr>
-      <td style="padding:8px 10px; background-color:#ffffff; border:1px solid #eeeeee;">
-        <p style="margin:0 0 2px 0; font-size:11px; font-weight:bold; color:#222222; text-transform:uppercase; letter-spacing:1.5px;">Notes / Remarks</p>
-        <p style="margin:0; font-size:11px; color:#444444; line-height:1.4;">{d['other_notes']}</p>
-      </td>
-    </tr>
-  </table>"""
-    exchange_rows = ""
-    if d["payment_type"] == "Exchange":
-        exchange_rows = f"""
-      <tr>
-        <td style="padding:8px 12px; border-bottom:1px solid #eeeeee; color:#444; font-weight:bold; background-color:#f9f9f9; font-size:13px;">Old Phone Model</td>
-        <td style="padding:8px 12px; border-bottom:1px solid #eeeeee; color:#222222; background-color:#f9f9f9; font-size:13px;">{d['old_phone_model']}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px; border-bottom:1px solid #eeeeee; color:#444; font-weight:bold; background-color:#ffffff; font-size:13px;">Old Phone IMEI</td>
-        <td style="padding:8px 12px; border-bottom:1px solid #eeeeee; color:#222222; font-family:Courier; letter-spacing:1px; background-color:#ffffff; font-size:13px;">{d['old_phone_imei']}</td>
-      </tr>"""
-
-    return f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-    @page {{ size: A4; margin: 8mm; background: #ffffff; }}
-    body {{ font-family: Helvetica, Arial, sans-serif; color: #222222; margin: 0; padding: 0; }}
-    p {{ margin: 0; }}
-    .table-main {{ width: 100%; border-collapse: collapse; margin-top: 0; }}
-    .table-main th {{ background-color: #990000; color: #ffffff; text-align: left; padding: 8px 12px; font-size: 13px; font-weight: bold; text-transform: uppercase; }}
-    .table-main td {{ padding: 8px 12px; border-bottom: 1px solid #eeeeee; font-size: 13px; color: #222222; }}
-    .table-totals {{ width: 100%; border-collapse: collapse; margin-top: 0; }}
-</style>
-</head>
-<body>
-
-    <table width="100%" cellpadding="8" style="background-color: #222222; border-bottom: 5px solid #990000;">
-        <tr>
-            <td align="center">
-                <p style="color: #ffffff; font-size: 24px; font-weight: bold; letter-spacing: 2px; margin: 0 0 2px 0;">SMART CHOICE MOBILES</p>
-                <p style="color: #cccccc; font-size: 10.5px; margin: 0;">Maligathanna, Gurudeniya &nbsp;&nbsp;|&nbsp;&nbsp; Phone / WhatsApp: 0723175373 &nbsp;&nbsp;|&nbsp;&nbsp; smartchoicemobileskandy@gmail.com</p>
-            </td>
-        </tr>
-    </table>
-
-    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:30px;">
-        <tr>
-            <td width="50%" valign="top">
-                <p style="color: #990000; font-size: 12px; font-weight: bold; text-transform: uppercase; margin: 0 0 4px 0;">Billed To</p>
-                <p style="font-size: 13px; font-weight: bold; color: #222222; margin: 0 0 2px 0;">{d['customer_name']}</p>
-                <p style="font-size: 11px; color: #444444; margin: 0 0 1px 0;">{d.get('customer_address', '')}</p>
-                <p style="font-size: 11px; color: #444444; margin: 0 0 1px 0;">{d.get('customer_contact', '')}</p>
-                <p style="font-size: 11px; color: #444444; margin: 0;">{d['customer_email']}</p>
-            </td>
-
-            <td width="50%" valign="top" align="right">
-                <p style="color: #990000; font-size: 12px; font-weight: bold; text-transform: uppercase; margin: 0 0 4px 0; text-align: right;">Invoice Details</p>
-                <table width="100%" cellpadding="2" cellspacing="0" border="0">
-                    <tr>
-                        <td width="50%" align="right" style="font-size: 11px; font-weight: bold; color: #222222;">Invoice #:</td>
-                        <td width="50%" align="right" style="font-size: 11px; color: #444444;">{d['invoice_number']}</td>
-                    </tr>
-                    <tr>
-                        <td width="50%" align="right" style="font-size: 11px; font-weight: bold; color: #222222;">Date:</td>
-                        <td width="50%" align="right" style="font-size: 11px; color: #444444;">{d['date']}</td>
-                    </tr>
-                    <tr>
-                        <td width="50%" align="right" style="font-size: 11px; font-weight: bold; color: #222222;">Payment:</td>
-                        <td width="50%" align="right" style="font-size: 11px; color: #444444;">{d['payment_type']}</td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-
-    <!-- ════════════ TRANSACTION TABLE ════════════ -->
-    <table class="table-main" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eeeeee; border-collapse:collapse; margin-top:25px;">
-      <tr>
-        <th style="background-color:#990000; padding:8px 12px; font-size:13px; font-weight:bold; color:#ffffff; text-transform:uppercase; width:40%;">Description</th>
-        <th style="background-color:#990000; padding:8px 12px; font-size:13px; font-weight:bold; color:#ffffff; text-transform:uppercase;">Details</th>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px; border-bottom:1px solid #eeeeee; color:#444; font-weight:bold; background-color:#ffffff; font-size:13px; width:40%;">New Phone Model</td>
-        <td style="padding:8px 12px; border-bottom:1px solid #eeeeee; color:#222222; font-weight:bold; background-color:#ffffff; font-size:13px;">{d['new_phone_model']}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px; border-bottom:1px solid #eeeeee; color:#444; font-weight:bold; background-color:#f9f9f9; font-size:13px; width:40%;">New Phone IMEI</td>
-        <td style="padding:8px 12px; border-bottom:1px solid #eeeeee; color:#222222; font-family:Courier; letter-spacing:1px; background-color:#f9f9f9; font-size:13px;">{d['new_phone_imei']}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px; border-bottom:1px solid #eeeeee; color:#444; font-weight:bold; background-color:#ffffff; font-size:13px; width:40%;">Warranty Period</td>
-        <td style="padding:8px 12px; border-bottom:1px solid #eeeeee; color:#222222; background-color:#ffffff; font-size:13px;">{d['warranty']}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px; border-bottom:1px solid #eeeeee; color:#444; font-weight:bold; background-color:#f9f9f9; font-size:13px; width:40%;">Payment Type</td>
-        <td style="padding:8px 12px; border-bottom:1px solid #eeeeee; color:#222222; background-color:#f9f9f9; font-size:13px;">{d['payment_type']}</td>
-      </tr>
-      {exchange_rows}
-    </table>
-
-    <!-- ════════════ TOTALS ════════════ -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:5px;">
-      <tr>
-        <td width="55%"></td>
-        <td width="45%">
-          <table class="table-totals" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-            <tr>
-              <td style="padding:6px 12px; border-bottom:1px solid #eeeeee; font-size:12px; font-weight:bold; color:#666; text-transform:uppercase; letter-spacing:1px;">Total Amount</td>
-              <td align="right" style="padding:6px 12px; border-bottom:1px solid #eeeeee; font-size:16px; font-weight:bold; color:#222222;">Rs. {d['total_price']}</td>
-            </tr>
-            <tr>
-              <td style="padding:6px 12px; font-size:12px; font-weight:bold; color:#222222; text-transform:uppercase; letter-spacing:1px;">Balance Due</td>
-              <td align="right" style="padding:6px 12px; font-size:18px; font-weight:bold; color:#990000;">Rs. {d['balance']}</td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-
-    {notes_section}
-
-    <!-- ════════════ TERMS & WARRANTY POLICY ════════════ -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:5px;">
-      <tr>
-        <td style="padding:6px 10px; background-color:#f9f9f9; border:1px solid #eeeeee;">
-          <p style="margin:0 0 4px 0; font-size:11px; font-weight:bold; color:#222222; text-transform:uppercase; letter-spacing:1.5px;">Terms &amp; Warranty Policy</p>
-          <p style="margin:0 0 2px 0; font-size:10px; color:#444444; line-height:1.4;">1. Warranty claims are valid ONLY for issues that occur strictly within the specified warranty period mentioned in this invoice.</p>
-          <p style="margin:0 0 2px 0; font-size:10px; color:#444444; line-height:1.4;">2. The warranty seal/sticker applied on the device MUST be intact. Any tampering, tearing, or removal of the seal will immediately void the entire warranty.</p>
-          <p style="margin:0 0 2px 0; font-size:10px; color:#444444; line-height:1.4;">3. The original invoice must be presented for any warranty claims.</p>
-          <p style="margin:0 0 2px 0; font-size:10px; color:#444444; line-height:1.4;">4. Physical damage, liquid damage, and display drops are completely not covered under warranty.</p>
-          <p style="margin:0; font-size:10px; color:#444444; line-height:1.4;">5. Software issues are subject to the standard company policy.</p>
-        </td>
-      </tr>
-    </table>
-
-    <!-- ════════════ FOOTER ════════════ -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:5px;">
-      <tr><td style="background-color:#990000; height:2px; font-size:1px;">&nbsp;</td></tr>
-    </table>
-    <table width="100%" cellpadding="0" cellspacing="0">
-      <tr>
-        <td align="center" style="padding:4px 0 0 0;">
-          <p style="margin:0 0 1px 0; font-size:9px; color:#555;">Thank you for choosing <b style="color:#222222;">Smart Choice Mobiles Kandy</b>!</p>
-          <p style="margin:0; font-size:9px; color:#999;">Computer-generated document. No signature required.</p>
-        </td>
-      </tr>
-    </table>
-
-</body>
-</html>"""
+def make_paragraph(text, size=9, bold=False, color=colors.HexColor('#222222'), align=TA_LEFT):
+    style_name = f"custom_{size}_{bold}_{color.hexval()}_{align}"
+    styles = getSampleStyleSheet()
+    if style_name not in styles:
+        p_style = ParagraphStyle(
+            name=style_name,
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold' if bold else 'Helvetica',
+            fontSize=size,
+            leading=size + 3,
+            textColor=color,
+            alignment=align
+        )
+        styles.add(p_style)
+    else:
+        p_style = styles[style_name]
+    return Paragraph(text, p_style)
 
 
-def generate_pdf(html: str) -> bytes:
-    """Convert HTML to PDF bytes using xhtml2pdf."""
+def generate_pdf(d: dict) -> bytes:
+    """Convert transaction data dictionary to PDF bytes using reportlab."""
     buffer = io.BytesIO()
-    pisa_status = pisa.CreatePDF(io.StringIO(html), dest=buffer)
-    if pisa_status.err:
-        raise RuntimeError(f"PDF generation failed with {pisa_status.err} error(s)")
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=24,
+        rightMargin=24,
+        topMargin=24,
+        bottomMargin=24
+    )
+    story = []
+
+    # 1. Header Box
+    header_title = make_paragraph("SMART CHOICE MOBILES", size=22, bold=True, color=colors.white, align=TA_CENTER)
+    header_sub = make_paragraph("Maligathanna, Gurudeniya    |    Phone / WhatsApp: 0723175373    |    smartchoicemobileskandy@gmail.com", size=9.5, bold=False, color=colors.HexColor('#CCCCCC'), align=TA_CENTER)
+    header_table = Table([[header_title], [header_sub]], colWidths=[547])
+    header_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#222222')),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 2),
+        ('TOPPADDING', (0,0), (-1,-1), 10),
+        ('BOTTOMPADDING', (0,1), (-1,-1), 10),
+        ('LINEBELOW', (0,1), (-1,1), 5, colors.HexColor('#990000')),
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1, 25))
+
+    # 2. Billed To / Invoice Details Section
+    billed_to_flow = [
+        make_paragraph("BILLED TO", size=9, bold=True, color=colors.HexColor('#990000')),
+        Spacer(1, 4),
+        make_paragraph(d['customer_name'], size=11, bold=True),
+        Spacer(1, 2),
+        make_paragraph(d.get('customer_address', ''), size=9, color=colors.HexColor('#444444')),
+        Spacer(1, 1),
+        make_paragraph(d.get('customer_contact', ''), size=9, color=colors.HexColor('#444444')),
+        Spacer(1, 1),
+        make_paragraph(d['customer_email'], size=9, color=colors.HexColor('#444444')),
+    ]
+
+    details_data = [
+        [make_paragraph("Invoice #:", size=9, bold=True, align=TA_RIGHT), make_paragraph(d['invoice_number'], size=9, color=colors.HexColor('#444444'), align=TA_RIGHT)],
+        [make_paragraph("Date:", size=9, bold=True, align=TA_RIGHT), make_paragraph(d['date'], size=9, color=colors.HexColor('#444444'), align=TA_RIGHT)],
+        [make_paragraph("Payment:", size=9, bold=True, align=TA_RIGHT), make_paragraph(d['payment_type'], size=9, color=colors.HexColor('#444444'), align=TA_RIGHT)],
+    ]
+    details_table = Table(details_data, colWidths=[140, 100])
+    details_table.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('LEFTPADDING', (0,0), (-1,-1), 0),
+        ('RIGHTPADDING', (0,0), (-1,-1), 0),
+    ]))
+
+    details_flow = [
+        make_paragraph("INVOICE DETAILS", size=9, bold=True, color=colors.HexColor('#990000'), align=TA_RIGHT),
+        Spacer(1, 4),
+        details_table
+    ]
+
+    info_table = Table([[billed_to_flow, details_flow]], colWidths=[273.5, 273.5])
+    info_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('LEFTPADDING', (0,0), (-1,-1), 0),
+        ('RIGHTPADDING', (0,0), (-1,-1), 0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
+    ]))
+    story.append(info_table)
+    story.append(Spacer(1, 20))
+
+    # 3. Transaction Table
+    tx_rows = [
+        [make_paragraph("DESCRIPTION", size=9, bold=True, color=colors.white),
+         make_paragraph("DETAILS", size=9, bold=True, color=colors.white)],
+        [make_paragraph("New Phone Model", size=9, bold=True, color=colors.HexColor('#444444')),
+         make_paragraph(d['new_phone_model'], size=9, bold=True)],
+        [make_paragraph("New Phone IMEI", size=9, bold=True, color=colors.HexColor('#444444')),
+         make_paragraph(d['new_phone_imei'], size=9, color=colors.HexColor('#222222'))],
+        [make_paragraph("Warranty Period", size=9, bold=True, color=colors.HexColor('#444444')),
+         make_paragraph(d['warranty'], size=9)],
+        [make_paragraph("Payment Type", size=9, bold=True, color=colors.HexColor('#444444')),
+         make_paragraph(d['payment_type'], size=9)],
+    ]
+    if d['payment_type'] == "Exchange":
+        tx_rows.append([
+            make_paragraph("Old Phone Model", size=9, bold=True, color=colors.HexColor('#444444')),
+            make_paragraph(d['old_phone_model'], size=9)
+        ])
+        tx_rows.append([
+            make_paragraph("Old Phone IMEI", size=9, bold=True, color=colors.HexColor('#444444')),
+            make_paragraph(d['old_phone_imei'], size=9)
+        ])
+
+    tx_style = [
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#990000')),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('TOPPADDING', (0,0), (-1,-1), 5),
+        ('LEFTPADDING', (0,0), (-1,-1), 10),
+        ('RIGHTPADDING', (0,0), (-1,-1), 10),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#EEEEEE')),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor('#EEEEEE')),
+    ]
+    for idx in range(1, len(tx_rows)):
+        bg_color = colors.HexColor('#FFFFFF') if idx % 2 == 1 else colors.HexColor('#F9F9F9')
+        tx_style.append(('BACKGROUND', (0, idx), (-1, idx), bg_color))
+
+    tx_table = Table(tx_rows, colWidths=[200, 347])
+    tx_table.setStyle(TableStyle(tx_style))
+    story.append(tx_table)
+    story.append(Spacer(1, 10))
+
+    # 4. Totals Section
+    totals_data = [
+        [make_paragraph("Total Amount", size=9, bold=True, color=colors.HexColor('#666666')),
+         make_paragraph(f"Rs. {d['total_price']}", size=11, bold=True, align=TA_RIGHT)],
+        [make_paragraph("Balance Due", size=9, bold=True, color=colors.HexColor('#222222')),
+         make_paragraph(f"Rs. {d['balance']}", size=13, bold=True, color=colors.HexColor('#990000'), align=TA_RIGHT)],
+    ]
+    totals_table = Table(totals_data, colWidths=[120, 127])
+    totals_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('TOPPADDING', (0,0), (-1,-1), 5),
+        ('LEFTPADDING', (0,0), (-1,-1), 10),
+        ('RIGHTPADDING', (0,0), (-1,-1), 10),
+        ('LINEBELOW', (0,0), (-1,0), 0.5, colors.HexColor('#EEEEEE')),
+    ]))
+
+    totals_layout = Table([["", totals_table]], colWidths=[300, 247])
+    totals_layout.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('LEFTPADDING', (0,0), (-1,-1), 0),
+        ('RIGHTPADDING', (0,0), (-1,-1), 0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
+    ]))
+    story.append(totals_layout)
+    story.append(Spacer(1, 10))
+
+    # 5. Notes / Remarks Box (Conditional)
+    if d.get("other_notes", "").strip():
+        notes_data = [
+            [make_paragraph("Notes / Remarks", size=9, bold=True, color=colors.HexColor('#222222'))],
+            [make_paragraph(d['other_notes'], size=9, color=colors.HexColor('#444444'))]
+        ]
+        notes_table = Table(notes_data, colWidths=[547])
+        notes_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.white),
+            ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#EEEEEE')),
+            ('TOPPADDING', (0,0), (-1,0), 6),
+            ('BOTTOMPADDING', (0,0), (-1,0), 2),
+            ('TOPPADDING', (0,1), (-1,-1), 2),
+            ('BOTTOMPADDING', (0,1), (-1,-1), 6),
+            ('LEFTPADDING', (0,0), (-1,-1), 10),
+            ('RIGHTPADDING', (0,0), (-1,-1), 10),
+        ]))
+        story.append(notes_table)
+        story.append(Spacer(1, 10))
+
+    # 6. Terms & Warranty Policy
+    terms_body = (
+        "1. Warranty claims are valid ONLY for issues that occur strictly within the specified warranty period mentioned in this invoice.<br/>"
+        "2. The warranty seal/sticker applied on the device MUST be intact. Any tampering, tearing, or removal of the seal will immediately void the entire warranty.<br/>"
+        "3. The original invoice must be presented for any warranty claims.<br/>"
+        "4. Physical damage, liquid damage, and display drops are completely not covered under warranty.<br/>"
+        "5. Software issues are subject to the standard company policy."
+    )
+    terms_data = [
+        [make_paragraph("Terms & Warranty Policy", size=9, bold=True, color=colors.HexColor('#222222'))],
+        [make_paragraph(terms_body, size=8, color=colors.HexColor('#444444'))]
+    ]
+    terms_table = Table(terms_data, colWidths=[547])
+    terms_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F9F9F9')),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#EEEEEE')),
+        ('TOPPADDING', (0,0), (-1,0), 5),
+        ('BOTTOMPADDING', (0,0), (-1,0), 2),
+        ('TOPPADDING', (0,1), (-1,-1), 2),
+        ('BOTTOMPADDING', (0,1), (-1,-1), 5),
+        ('LEFTPADDING', (0,0), (-1,-1), 10),
+        ('RIGHTPADDING', (0,0), (-1,-1), 10),
+    ]))
+    story.append(terms_table)
+    story.append(Spacer(1, 10))
+
+    # 7. Footer
+    footer_line = Table([[""]], colWidths=[547])
+    footer_line.setStyle(TableStyle([
+        ('LINEABOVE', (0,0), (-1,-1), 1.5, colors.HexColor('#990000')),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
+    ]))
+    story.append(footer_line)
+    story.append(Spacer(1, 4))
+
+    footer_text_1 = make_paragraph("Thank you for choosing <b>Smart Choice Mobiles Kandy</b>!", size=8.5, color=colors.HexColor('#555555'), align=TA_CENTER)
+    footer_text_2 = make_paragraph("Computer-generated document. No signature required.", size=8, color=colors.HexColor('#999999'), align=TA_CENTER)
+    story.append(footer_text_1)
+    story.append(Spacer(1, 1))
+    story.append(footer_text_2)
+
+    doc.build(story)
     return buffer.getvalue()
 
 
@@ -440,10 +507,9 @@ if submitted:
             st.error(f"❌ Failed to save to Google Sheets: {e}")
 
         # Build PDF & Send
-        html = build_pdf_html(data)
         try:
-            pdf_bytes = generate_pdf(html)
-        except RuntimeError as e:
+            pdf_bytes = generate_pdf(data)
+        except Exception as e:
             st.error(f"❌ PDF generation error: {e}")
             st.stop()
 
