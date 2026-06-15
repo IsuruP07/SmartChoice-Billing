@@ -5,7 +5,6 @@ Run: streamlit run app.py
 
 import streamlit as st
 import smtplib
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import re
 import io
@@ -18,6 +17,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from supabase import create_client, Client
 
 # ── CONFIG ──
 SENDER_EMAIL = "smartchoicemobileskandy@gmail.com"
@@ -27,8 +27,15 @@ BUSINESS_TAGLINE = "Your Trusted Mobile Partner"
 
 st.set_page_config(page_title=f"{BUSINESS_NAME} Billing", page_icon="📱", layout="wide")
 
-# Establish Google Sheets connection
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Establish Supabase connection
+SUPABASE_URL = st.secrets["https://tbrvjkosxqultiygdfmy.supabase.co"]
+SUPABASE_KEY = st.secrets["sb_secret_hEnPdUNr2NFnAqbKjr5Inw_JSAe2EOW"]
+
+@st.cache_resource
+def get_supabase_client() -> Client:
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+supabase = get_supabase_client()
 
 # ── CUSTOM CSS ──
 st.markdown("""
@@ -80,6 +87,30 @@ def validate_email(email: str) -> bool:
 
 def validate_imei(imei: str) -> bool:
     return bool(re.match(r"^\d{15}$", imei))
+
+
+def fetch_invoices() -> pd.DataFrame:
+    """Fetch all invoices from Supabase billing_details table."""
+    try:
+        response = supabase.table("billing_details").select("*").execute()
+        if response.data:
+            df = pd.DataFrame(response.data)
+            if "created_at" in df.columns:
+                df = df.sort_values(by="created_at", ascending=True).reset_index(drop=True)
+            return df
+        return pd.DataFrame(columns=[
+            "invoice_number", "date", "customer_name", "customer_address", 
+            "customer_contact", "customer_email", "new_phone_model", 
+            "new_phone_imei", "warranty", "payment_type", "old_phone_model", 
+            "old_phone_imei", "total_price", "balance", "other_notes"
+        ])
+    except Exception as e:
+        raise e
+
+
+def insert_invoice(data: dict):
+    """Insert a new invoice record into Supabase billing_details table."""
+    return supabase.table("billing_details").insert(data).execute()
 
 
 
@@ -466,45 +497,11 @@ if submitted:
             "other_notes": other_notes.strip(),
         }
 
-        # Save to Google Sheets
+        # Save to Supabase
         try:
-            columns_order = [
-                "invoice_number",
-                "date",
-                "customer_name",
-                "customer_address",
-                "customer_contact",
-                "customer_email",
-                "new_phone_model",
-                "new_phone_imei",
-                "warranty",
-                "payment_type",
-                "old_phone_model",
-                "old_phone_imei",
-                "total_price",
-                "balance",
-                "other_notes"
-            ]
-
-            try:
-                existing_data = conn.read(ttl=0)
-                if existing_data is None or existing_data.empty or (len(existing_data.columns) == 0):
-                    existing_data = pd.DataFrame(columns=columns_order)
-                else:
-                    for col in columns_order:
-                        if col not in existing_data.columns:
-                            existing_data[col] = ""
-                    existing_data = existing_data[columns_order]
-            except Exception:
-                existing_data = pd.DataFrame(columns=columns_order)
-
-            new_row_df = pd.DataFrame([data], columns=columns_order)
-            updated_df = pd.concat([existing_data, new_row_df], ignore_index=True)
-            updated_df = updated_df[columns_order]
-
-            conn.update(data=updated_df)
+            insert_invoice(data)
         except Exception as e:
-            st.error(f"❌ Failed to save to Google Sheets: {e}")
+            st.error(f"❌ Failed to save to Supabase: {e}")
 
         # Build PDF & Send
         try:
@@ -532,13 +529,13 @@ if submitted:
             )
         else:
             st.error(f"❌ Failed to send: {err_msg}")
-            st.info("The invoice was still saved to the Google Sheets database.")
+            st.info("The invoice was still saved to the Supabase database.")
 
 # ── SIDEBAR: Sales History ──
 with st.sidebar:
     st.markdown("### 📊 Sales Database")
     try:
-        df = conn.read(ttl=0)
+        df = fetch_invoices()
         if df is not None and not df.empty:
             # Reorder columns to the strict layout if columns are present
             cols = [c for c in [
@@ -555,4 +552,4 @@ with st.sidebar:
             st.info("No sales recorded yet. Submit your first bill!")
     except Exception as e:
         st.error(f"Error loading sales database: {e}")
-        st.info("Please make sure your Google Sheets connection is properly configured.")
+        st.info("Please make sure your Supabase connection is properly configured.")
